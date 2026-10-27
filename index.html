@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estonian Cinema | 2020–Present</title>
+
+  <style>
+    :root {
+      --ink: #252720;
+      --muted: #77796f;
+      --paper: #f8f7f2;
+      --accent: #a43f30;
+      --line: #deddd4;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    header {
+      padding: 60px 8% 40px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font: 12px Arial, sans-serif;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 700px;
+      margin: 20px 0 12px;
+      font-size: clamp(38px, 7vw, 76px);
+      font-weight: normal;
+      line-height: 1.05;
+    }
+
+    header p {
+      max-width: 550px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 35px 5%;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    input {
+      width: min(100%, 340px);
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      background: white;
+      font: 14px Arial, sans-serif;
+    }
+
+    .count {
+      color: var(--muted);
+      font: 13px Arial, sans-serif;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border-top: 2px solid var(--ink);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th {
+      padding: 15px 12px;
+      color: var(--muted);
+      font: 11px Arial, sans-serif;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 17px 12px;
+      border-top: 1px solid var(--line);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    tr:hover td { background: #efeee7; }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    #status {
+      padding: 25px 0;
+      color: var(--muted);
+      font: 14px Arial, sans-serif;
+    }
+
+    footer {
+      padding: 25px 8%;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font: 12px Arial, sans-serif;
+    }
+
+    @media (max-width: 600px) {
+      header { padding-top: 40px; }
+      th, td { padding: 12px 9px; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="eyebrow">A small digital film archive</div>
+    <h1>Estonian Cinema</h1>
+    <p>
+      A graph of Estonia's recent drama movies and their directors (data from Wikidata)
+    </p>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input
+        id="search"
+        type="search"
+        placeholder="Search films or directors..."
+        aria-label="Search films or directors"
+      >
+      <div class="count" id="count">Loading films...</div>
+    </div>
+
+    <div id="status" role="status" aria-live="polite">
+      Fetching data from Wikidata...
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Film</th>
+            <th>Director</th>
+            <th>Release date</th>
+            <th>Duration</th>
+            <th>Country</th>
+          </tr>
+        </thead>
+        <tbody id="films"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <footer>
+    Data: Wikidata · Query results may change as the database is updated.
+  </footer>
+
+  <script>
+    const query = `
+      SELECT ?film ?filmLabel ?director ?directorLabel
+             ?countryLabel ?duration ?date
+      WHERE {
+        ?film wdt:P31 wd:Q11424;
+              wdt:P495 wd:Q191;
+              wdt:P136 wd:Q130232;
+              wdt:P2047 ?duration;
+              wdt:P577 ?date;
+              wdt:P57 ?director.
+
+        FILTER(?date >= "2020-01-01T00:00:00Z"^^xsd:dateTime)
+        FILTER(?duration >= 60)
+
+        BIND(wd:Q191 AS ?country)
+
+        SERVICE wikibase:label {
+          bd:serviceParam wikibase:language "et,en".
+        }
+      }
+      ORDER BY DESC(?date)
+    `;
+
+    const endpoint = "https://query.wikidata.org/sparql";
+
+    let allFilms = [];
+
+    const status = document.getElementById("status");
+    const tbody = document.getElementById("films");
+    const search = document.getElementById("search");
+    const count = document.getElementById("count");
+
+    function cell(text) {
+      const td = document.createElement("td");
+      td.textContent = text || "—";
+      return td;
+    }
+
+    function renderFilms() {
+      const term = search.value.trim().toLowerCase();
+
+      const filtered = allFilms.filter(film =>
+        film.title.toLowerCase().includes(term) ||
+        film.director.toLowerCase().includes(term)
+      );
+
+      tbody.replaceChildren();
+
+      filtered.forEach(film => {
+        const tr = document.createElement("tr");
+
+        const titleCell = document.createElement("td");
+        const link = document.createElement("a");
+        link.href = film.url;
+        link.textContent = film.title;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        titleCell.appendChild(link);
+
+        tr.append(
+          titleCell,
+          cell(film.director),
+          cell(film.date),
+          cell(film.duration + " min"),
+          cell(film.country)
+        );
+
+        tbody.appendChild(tr);
+      });
+
+      count.textContent =
+        `${filtered.length} of ${allFilms.length} films`;
+
+      if (allFilms.length === 0) {
+        status.textContent = "No films found for this query.";
+        status.hidden = false;
+      } else {
+        status.hidden = true;
+      }
+
+      if (allFilms.length > 0 && filtered.length === 0) {
+        status.textContent = "No films match your search.";
+        status.hidden = false;
+      }
+    }
+
+    async function loadFilms() {
+      try {
+        const response = await fetch(
+          endpoint + "?query=" + encodeURIComponent(query),
+          {
+            headers: {
+              Accept: "application/sparql-results+json"
+            }
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Wikidata returned HTTP " + response.status);
+        }
+
+        const data = await response.json();
+
+        allFilms = data.results.bindings.map(row => ({
+          title: row.filmLabel?.value || "Untitled",
+          director: row.directorLabel?.value || "Unknown",
+          country: row.countryLabel?.value || "Estonia",
+          date: row.date?.value?.slice(0, 10) || "Unknown",
+          duration: Math.round(Number(row.duration.value)),
+          url: row.film.value
+        }));
+
+        renderFilms();
+      } catch (error) {
+        console.error(error);
+        status.hidden = false;
+        status.textContent =
+          "Could not load films. Please try again later.";
+        count.textContent = "Data unavailable";
+      }
+    }
+
+    search.addEventListener("input", renderFilms);
+    loadFilms();
+  </script>
+</body>
+</html>
